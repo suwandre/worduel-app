@@ -7,6 +7,44 @@ import GameGrid from "../components/GameGrid";
 import Keyboard from "../components/Keyboard";
 import type { Game, GuessResult, SubmitGuessResponse } from "../types";
 
+const calculateGuessResult = (guess: string, target: string): GuessResult[] => {
+  const result: GuessResult[] = [];
+  const targetLetters = target.split("");
+  const guessLetters = guess.split("");
+  const targetUsed = new Array(target.length).fill(false);
+  const guessStatus = new Array(guess.length).fill("absent");
+
+  // First pass: correct positions
+  for (let i = 0; i < guessLetters.length; i++) {
+    if (guessLetters[i] === targetLetters[i]) {
+      guessStatus[i] = "correct";
+      targetUsed[i] = true;
+    }
+  }
+
+  // Second pass: present letters
+  for (let i = 0; i < guessLetters.length; i++) {
+    if (guessStatus[i] === "correct") continue;
+
+    for (let j = 0; j < targetLetters.length; j++) {
+      if (!targetUsed[j] && guessLetters[i] === targetLetters[j]) {
+        guessStatus[i] = "present";
+        targetUsed[j] = true;
+        break;
+      }
+    }
+  }
+
+  for (let i = 0; i < guessLetters.length; i++) {
+    result.push({
+      letter: guessLetters[i],
+      status: guessStatus[i] as GuessResult["status"],
+    });
+  }
+
+  return result;
+};
+
 export default function GamePage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -19,48 +57,9 @@ export default function GamePage() {
   const [loading, setLoading] = useState(true);
   const [modalOpened, setModalOpened] = useState(false);
 
-  const calculateGuessResult = (
-    guess: string,
-    target: string
-  ): GuessResult[] => {
-    const result: GuessResult[] = [];
-    const targetLetters = target.split("");
-    const guessLetters = guess.split("");
-    const targetUsed = new Array(target.length).fill(false);
-    const guessStatus = new Array(guess.length).fill("absent");
+  const isGameOver = game?.status !== "in_progress";
 
-    // First pass: correct positions
-    for (let i = 0; i < guessLetters.length; i++) {
-      if (guessLetters[i] === targetLetters[i]) {
-        guessStatus[i] = "correct";
-        targetUsed[i] = true;
-      }
-    }
-
-    // Second pass: present letters
-    for (let i = 0; i < guessLetters.length; i++) {
-      if (guessStatus[i] === "correct") continue;
-
-      for (let j = 0; j < targetLetters.length; j++) {
-        if (!targetUsed[j] && guessLetters[i] === targetLetters[j]) {
-          guessStatus[i] = "present";
-          targetUsed[j] = true;
-          break;
-        }
-      }
-    }
-
-    for (let i = 0; i < guessLetters.length; i++) {
-      result.push({
-        letter: guessLetters[i],
-        status: guessStatus[i] as GuessResult["status"],
-      });
-    }
-
-    return result;
-  };
-
-  const updateLetterStatuses = (results: GuessResult[]) => {
+  const updateLetterStatuses = useCallback((results: GuessResult[]) => {
     setLetterStatuses((prev) => {
       const updated = { ...prev };
       results.forEach((result) => {
@@ -76,7 +75,7 @@ export default function GamePage() {
       });
       return updated;
     });
-  };
+  }, []);
 
   const fetchGame = useCallback(async () => {
     try {
@@ -106,23 +105,26 @@ export default function GamePage() {
     } finally {
       setLoading(false);
     }
-  }, [id, navigate]);
+  }, [id, navigate, updateLetterStatuses]);
 
   useEffect(() => {
     fetchGame();
   }, [fetchGame]);
 
-  const handleKeyPress = (key: string) => {
-    if (currentGuess.length < 5) {
-      setCurrentGuess(currentGuess + key.toLowerCase());
-    }
-  };
+  const handleKeyPress = useCallback(
+    (key: string) => {
+      if (currentGuess.length < 5) {
+        setCurrentGuess(currentGuess + key.toLowerCase());
+      }
+    },
+    [currentGuess]
+  );
 
-  const handleBackspace = () => {
+  const handleBackspace = useCallback(() => {
     setCurrentGuess(currentGuess.slice(0, -1));
-  };
+  }, [currentGuess]);
 
-  const handleEnter = async () => {
+  const handleEnter = useCallback(async () => {
     if (currentGuess.length !== 5) {
       notifications.show({
         title: "Invalid guess",
@@ -157,12 +159,32 @@ export default function GamePage() {
         color: "red",
       });
     }
-  };
+  }, [currentGuess, id, guessResults, updateLetterStatuses]);
+
+  // Add keyboard support
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isGameOver) return;
+
+      const key = event.key.toLowerCase();
+
+      if (key === "enter") {
+        event.preventDefault();
+        handleEnter();
+      } else if (key === "backspace") {
+        event.preventDefault();
+        handleBackspace();
+      } else if (/^[a-z]$/.test(key) && currentGuess.length < 5) {
+        handleKeyPress(key.toUpperCase());
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [currentGuess, isGameOver, handleEnter, handleBackspace, handleKeyPress]);
 
   if (loading) return <Text>Loading...</Text>;
   if (!game) return <Text>Game not found</Text>;
-
-  const isGameOver = game.status !== "in_progress";
 
   return (
     <Stack align="center" gap="xl">
