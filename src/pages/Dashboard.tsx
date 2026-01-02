@@ -1,17 +1,18 @@
-import { useState } from "react";
-import { Button, Paper, Title, Text, Group, Stack, Grid } from "@mantine/core";
-import { useAuth } from "../hooks/useAuth";
-import CreateGameModal from "../components/CreateGameModal";
-import GamesList from "../components/GamesList";
+import { useState } from 'react';
+import { Button, Paper, Title, Text, Group, Stack, Grid } from '@mantine/core';
+import { useAuth } from '../hooks/useAuth';
+import CreateGameModal from '../components/CreateGameModal';
+import GamesList from '../components/GamesList';
+import InvitesPanel from '../components/InvitesPanel';
+import Leaderboard from '../components/Leaderboard';
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
   const [createModalOpened, setCreateModalOpened] = useState(false);
 
-  const winRate =
-    user && user.gamesPlayed > 0
-      ? Math.round((user.gamesWon / user.gamesPlayed) * 100)
-      : 0;
+  const winRate = user && user.gamesPlayed > 0 
+    ? Math.round((user.gamesWon / user.gamesPlayed) * 100) 
+    : 0;
 
   return (
     <div>
@@ -81,21 +82,22 @@ export default function Dashboard() {
           Quick Actions
         </Title>
         <Stack gap="sm">
-          <Button
-            fullWidth
+          <Button 
+            fullWidth 
             size="lg"
             onClick={() => setCreateModalOpened(true)}
           >
             🎮 Create New Game
           </Button>
-          <Button fullWidth size="lg" variant="light" disabled>
-            📨 Send Invite (Coming Soon)
-          </Button>
         </Stack>
       </Paper>
 
       {/* Games List */}
-      <GamesList />
+      <Stack gap="xl">
+        <GamesList />
+        <InvitesPanel />
+        <Leaderboard />
+      </Stack>
 
       {/* Create Game Modal */}
       <CreateGameModal
