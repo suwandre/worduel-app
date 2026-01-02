@@ -5,8 +5,12 @@ import {
   Navigate,
 } from "react-router-dom";
 import { Container, Loader, Center } from "@mantine/core";
-import { useAuth } from './hooks/useAuth';
-import { AuthProvider } from './context/AuthProvider';
+import { useAuth } from "./hooks/useAuth";
+import { AuthProvider } from "./context/AuthProvider";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import Dashboard from "./pages/Dashboard";
+import Game from "./pages/Game";
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token, loading } = useAuth();
