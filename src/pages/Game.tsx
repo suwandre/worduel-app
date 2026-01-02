@@ -6,6 +6,7 @@ import { apiClient } from "../api/client";
 import GameGrid from "../components/GameGrid";
 import Keyboard from "../components/Keyboard";
 import type { Game, GuessResult, SubmitGuessResponse } from "../types";
+import { useAuth } from "../hooks/useAuth";
 
 const calculateGuessResult = (guess: string, target: string): GuessResult[] => {
   const result: GuessResult[] = [];
@@ -48,6 +49,7 @@ const calculateGuessResult = (guess: string, target: string): GuessResult[] => {
 export default function GamePage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [game, setGame] = useState<Game | null>(null);
   const [currentGuess, setCurrentGuess] = useState("");
   const [guessResults, setGuessResults] = useState<GuessResult[][]>([]);
@@ -58,6 +60,8 @@ export default function GamePage() {
   const [modalOpened, setModalOpened] = useState(false);
 
   const isGameOver = game?.status !== "in_progress";
+  const isCreator = game?.playerId === user?.id;
+  const canPlay = !isCreator && !isGameOver;
 
   const updateLetterStatuses = useCallback((results: GuessResult[]) => {
     setLetterStatuses((prev) => {
@@ -164,7 +168,7 @@ export default function GamePage() {
   // Add keyboard support
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (isGameOver) return;
+      if (!canPlay) return;
 
       const key = event.key.toLowerCase();
 
@@ -181,7 +185,7 @@ export default function GamePage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentGuess, isGameOver, handleEnter, handleBackspace, handleKeyPress]);
+  }, [currentGuess, canPlay, handleEnter, handleBackspace, handleKeyPress]);
 
   if (loading) return <Text>Loading...</Text>;
   if (!game) return <Text>Game not found</Text>;
@@ -197,6 +201,16 @@ export default function GamePage() {
         <Title order={2} ta="center" mb="md">
           Worduel
         </Title>
+
+        {/* Show creator waiting message */}
+        {isCreator && game.status === "in_progress" && (
+          <Paper p="md" mb="md" bg="blue.1" withBorder>
+            <Text ta="center" c="blue" fw={500}>
+              ⏳ Waiting for opponent to guess your word...
+            </Text>
+          </Paper>
+        )}
+
         <Group justify="space-between" mb="md">
           <Text size="sm">
             Attempts: {game.guesses.length}/{game.maxAttempts}
@@ -217,7 +231,7 @@ export default function GamePage() {
 
         <GameGrid
           guesses={game.guesses}
-          currentGuess={currentGuess}
+          currentGuess={canPlay ? currentGuess : ""}
           maxAttempts={game.maxAttempts}
           guessResults={guessResults}
         />
@@ -228,19 +242,29 @@ export default function GamePage() {
         onEnter={handleEnter}
         onBackspace={handleBackspace}
         letterStatuses={letterStatuses}
-        disabled={isGameOver}
+        disabled={!canPlay} // Disable if creator or game over
       />
 
       <Modal
         opened={modalOpened}
         onClose={() => setModalOpened(false)}
-        title={game.status === "won" ? "🎉 You Won!" : "😔 Game Over"}
+        title={
+          game.status === "won"
+            ? isCreator
+              ? "🎉 They Won!"
+              : "🎉 You Won!"
+            : isCreator
+            ? "😔 They Lost!"
+            : "😔 Game Over"
+        }
         centered
       >
         <Stack>
           <Text>
             {game.status === "won"
-              ? `Congratulations! You guessed the word in ${game.guesses.length} attempts.`
+              ? isCreator
+                ? `Your opponent guessed the word in ${game.guesses.length} attempts!`
+                : `Congratulations! You guessed the word in ${game.guesses.length} attempts.`
               : `The word was: ${game.targetWord.toUpperCase()}`}
           </Text>
           <Button onClick={() => navigate("/dashboard")}>
