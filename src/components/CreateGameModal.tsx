@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Modal, TextInput, Button, Stack, Text, Select } from '@mantine/core';
-import { useForm } from '@mantine/form';
+import { Modal, Button, Stack, Text, Select, Group } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { apiClient } from '../api/client';
 import { useNavigate } from 'react-router-dom';
@@ -21,20 +20,22 @@ export default function CreateGameModal({ opened, onClose }: CreateGameModalProp
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [wordOptions, setWordOptions] = useState<string[]>([]);
+  const [selectedWord, setSelectedWord] = useState<string>('');
+  const [selectedOpponent, setSelectedOpponent] = useState<string>('');
+  const [loadingWords, setLoadingWords] = useState(false);
 
   useEffect(() => {
     if (opened) {
       fetchUsers();
+      fetchWordOptions();
     }
   }, [opened]);
 
   const fetchUsers = async () => {
     try {
-      const response = await apiClient.get('/users/leaderboard');
-      setUsers(response.data.map((u: User) => ({
-        id: u.username, // Use username as ID for now
-        username: u.username,
-      })));
+      const usersList = await apiClient.get('/users/list');
+      setUsers(usersList.data);
     } catch {
       notifications.show({
         title: 'Error',
@@ -46,38 +47,37 @@ export default function CreateGameModal({ opened, onClose }: CreateGameModalProp
     }
   };
 
-  const form = useForm({
-    initialValues: {
-      targetWord: '',
-      opponentUsername: '',
-    },
-    validate: {
-      targetWord: (value) => {
-        if (value.length !== 5) return 'Word must be exactly 5 letters';
-        if (!/^[a-zA-Z]+$/.test(value)) return 'Word must contain only letters';
-        return null;
-      },
-      opponentUsername: (value) => {
-        if (!value) return 'Please select an opponent';
-        return null;
-      },
-    },
-  });
+  const fetchWordOptions = async () => {
+    setLoadingWords(true);
+    try {
+      const response = await apiClient.get('/games/word-options?count=4');
+      setWordOptions(response.data);
+      setSelectedWord(''); // Reset selection when getting new words
+    } catch {
+      notifications.show({
+        title: 'Error',
+        message: 'Failed to load word options',
+        color: 'red',
+      });
+    } finally {
+      setLoadingWords(false);
+    }
+  };
 
-  const handleSubmit = async (values: typeof form.values) => {
+  const handleSubmit = async () => {
+    if (!selectedWord || !selectedOpponent) return;
+
     setLoading(true);
     try {
-      // Find opponent by username
-      const opponent = users.find(u => u.username === values.opponentUsername);
-      
       const response = await apiClient.post('/games', {
-        targetWord: values.targetWord.toUpperCase(),
-        opponentId: opponent?.id, // This won't work yet - we need user ID endpoint
+        targetWord: selectedWord,
+        opponentId: selectedOpponent,
       });
       
+      const opponent = users.find(u => u.id === selectedOpponent);
       notifications.show({
         title: 'Game created!',
-        message: `Waiting for ${values.opponentUsername} to play...`,
+        message: `Waiting for ${opponent?.username} to play...`,
         color: 'green',
       });
       
@@ -96,36 +96,58 @@ export default function CreateGameModal({ opened, onClose }: CreateGameModalProp
 
   return (
     <Modal opened={opened} onClose={onClose} title="Create New Game" centered>
-      <form onSubmit={form.onSubmit(handleSubmit)}>
-        <Stack gap="md">
-          <Text size="sm" c="dimmed">
-            Choose a word and challenge an opponent
+      <Stack gap="md">
+        <Text size="sm" c="dimmed">
+          Choose a word and challenge an opponent
+        </Text>
+
+        <Select
+          label="Opponent"
+          placeholder="Select opponent"
+          data={users.map(u => ({ value: u.id, label: u.username }))}
+          value={selectedOpponent}
+          onChange={(val) => setSelectedOpponent(val || '')}
+          searchable
+          required
+          disabled={loadingUsers}
+        />
+        
+        <Stack gap="xs">
+          <Text size="sm" fw={500}>
+            Target Word (Select 1 of 4)
           </Text>
-
-          <Select
-            label="Opponent"
-            placeholder="Select opponent"
-            data={users.map(u => ({ value: u.username, label: u.username }))}
-            searchable
-            required
-            disabled={loadingUsers}
-            {...form.getInputProps('opponentUsername')}
-          />
-          
-          <TextInput
-            label="Target Word"
-            placeholder="HELLO"
-            maxLength={5}
-            required
-            {...form.getInputProps('targetWord')}
-            styles={{ input: { textTransform: 'uppercase' } }}
-          />
-
-          <Button type="submit" fullWidth loading={loading}>
-            Create Game
+          <Group gap="xs">
+            {wordOptions.map((word) => (
+              <Button
+                key={word}
+                variant={selectedWord === word ? 'filled' : 'outline'}
+                onClick={() => setSelectedWord(word)}
+                disabled={loadingWords}
+                size="md"
+              >
+                {word}
+              </Button>
+            ))}
+          </Group>
+          <Button
+            variant="subtle"
+            size="xs"
+            onClick={fetchWordOptions}
+            loading={loadingWords}
+          >
+            🔄 Get Different Words
           </Button>
         </Stack>
-      </form>
+
+        <Button 
+          onClick={handleSubmit} 
+          fullWidth 
+          loading={loading}
+          disabled={!selectedWord || !selectedOpponent}
+        >
+          Create Game
+        </Button>
+      </Stack>
     </Modal>
   );
 }
